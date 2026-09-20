@@ -1,3 +1,5 @@
+import { isIpLiteral } from "./public-ip";
+
 /**
  * Normalize messy buyer input into a bare domain hostname.
  * Handles scheme, path, port, spaces, uppercase, trailing dots.
@@ -45,6 +47,8 @@ export function normalizeDomain(raw: string): string | null {
   if (host.startsWith("www.")) {
     host = host.slice(4);
   }
+
+  if (isIpLiteral(host)) return null;
 
   // Basic hostname validation (ASCII / punycode labels)
   if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(host)) {

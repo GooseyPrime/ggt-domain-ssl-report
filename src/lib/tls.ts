@@ -4,6 +4,7 @@ import tls from "node:tls";
 import type { CertExpiry, TlsDetails } from "./types";
 import { daysUntil, shouldWarn } from "./expiry";
 import { wwwOf } from "./normalize";
+import { resolvePublicAddress } from "./public-ip";
 
 function connectCert(host: string, servername: string): Promise<TlsDetails> {
   return new Promise((resolve) => {
@@ -108,10 +109,26 @@ function connectCert(host: string, servername: string): Promise<TlsDetails> {
 }
 
 export async function fetchTls(domain: string): Promise<TlsDetails> {
-  let details = await connectCert(domain, domain);
+  const primary = await resolvePublicAddress(domain);
+  if (!primary) {
+    return {
+      issuer: null,
+      subject: null,
+      notBefore: null,
+      notAfter: null,
+      san: [],
+      coversBare: null,
+      coversWww: null,
+      chainSubjects: [],
+      error: "Domain must resolve to a public IP address before TLS can be checked.",
+    };
+  }
+  let details = await connectCert(primary.address, domain);
   if (details.error || !details.notAfter) {
     const www = wwwOf(domain);
-    const alt = await connectCert(www, www);
+    const altTarget = await resolvePublicAddress(www);
+    if (!altTarget) return details;
+    const alt = await connectCert(altTarget.address, www);
     if (!alt.error && alt.notAfter) return alt;
   }
   return details;

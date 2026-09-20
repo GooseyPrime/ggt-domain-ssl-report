@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /**
  * Paid multi-domain report.
  * Checkout stays gated until shop SALE_PRODUCT_IDS includes domain-ssl-report.
- * Local/dev: ?paid=1, cookie ggt_paid=1, or GGT_PAID_STUB=1.
+ * Non-production only: ?paid=1, cookie ggt_paid=1, or GGT_PAID_STUB=1.
  */
 export async function POST(req: NextRequest) {
   const paid = isPaidStub({
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Paid report is gated until the shop desk allowlist includes domain-ssl-report. After purchase, return here with shop verify (or local ?paid=1 stub).",
+          "Paid report is gated until the shop desk allowlist includes domain-ssl-report. Production requires shop verification; local non-production may use the paid stub.",
         code: "PAYMENT_REQUIRED",
       },
       { status: 402 }

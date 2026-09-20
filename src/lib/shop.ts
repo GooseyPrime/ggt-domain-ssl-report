@@ -36,7 +36,8 @@ export function checkoutUrl(returnPath?: string): string {
 
 /**
  * Payment gate stub for local / pre-shop verify.
- * Production: call shop verify endpoint; this only checks:
+ * Non-production only; production must use shop verification.
+ * This only checks:
  *   - query ?paid=1
  *   - cookie ggt_paid=1
  *   - env GGT_PAID_STUB=1 (server)
@@ -46,6 +47,7 @@ export function isPaidStub(opts: {
   searchParams?: URLSearchParams | null;
   cookieHeader?: string | null;
 }): boolean {
+  if (process.env.NODE_ENV === "production") return false;
   if (process.env.GGT_PAID_STUB === "1") return true;
   if (opts.searchParams?.get("paid") === "1") return true;
   const cookie = opts.cookieHeader ?? "";

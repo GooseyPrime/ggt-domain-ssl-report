@@ -6,14 +6,20 @@ import { certExpiryFromTls, fetchTls } from "./tls";
 import { assessMail, fetchDns } from "./dns-mail";
 import { fetchRedirects } from "./redirects";
 import { buildIcs } from "./ics";
-import type { FreeLookupResult, PaidDomainReport, PaidReportResponse } from "./types";
+import type {
+  FreeLookupResult,
+  PaidDomainReport,
+  PaidReportResponse,
+  RdapDomain,
+  TlsDetails,
+} from "./types";
 
-export async function freeLookup(rawDomain: string, now = new Date()): Promise<FreeLookupResult> {
-  const domain = normalizeDomain(rawDomain);
-  if (!domain) {
-    throw new Error("Enter a domain like example.com (we strip https:// and paths).");
-  }
-  const [rdap, tls] = await Promise.all([fetchRdap(domain), fetchTls(domain)]);
+function buildFreeLookupResult(
+  domain: string,
+  rdap: RdapDomain | null,
+  tls: TlsDetails,
+  now: Date
+): FreeLookupResult {
   const domainExpiry = parseDomainExpiry(rdap, now);
   const certExpiry = certExpiryFromTls(tls, now);
   return {
@@ -25,15 +31,27 @@ export async function freeLookup(rawDomain: string, now = new Date()): Promise<F
   };
 }
 
+export async function freeLookup(rawDomain: string, now = new Date()): Promise<FreeLookupResult> {
+  const domain = normalizeDomain(rawDomain);
+  if (!domain) {
+    throw new Error("Enter a domain like example.com (we strip https:// and paths).");
+  }
+  const [rdap, tls] = await Promise.all([fetchRdap(domain), fetchTls(domain)]);
+  return buildFreeLookupResult(domain, rdap, tls, now);
+}
+
 export async function paidDomainReport(rawDomain: string, now = new Date()): Promise<PaidDomainReport> {
-  const free = await freeLookup(rawDomain, now);
-  const domain = free.domain;
+  const domain = normalizeDomain(rawDomain);
+  if (!domain) {
+    throw new Error("Enter a domain like example.com (we strip https:// and paths).");
+  }
   const [rdap, tls, dns, redirects] = await Promise.all([
     fetchRdap(domain),
     fetchTls(domain),
     fetchDns(domain),
     fetchRedirects(domain),
   ]);
+  const free = buildFreeLookupResult(domain, rdap, tls, now);
   const registrar = findRegistrar(rdap?.entities);
   const mail = await assessMail(domain, dns);
   const ownerSummary = [
@@ -51,7 +69,6 @@ export async function paidDomainReport(rawDomain: string, now = new Date()): Pro
     registrar,
     tls: {
       ...tls,
-      // refresh covers using apex
       coversBare: tls.san.includes(domain) || tls.san.some((s) => s === domain),
       coversWww:
         tls.san.includes(`www.${domain}`) ||

@@ -1,20 +1,51 @@
 /** HTTP(S) redirect / HTTPS-force probes. */
 
+import http from "node:http";
+import https from "node:https";
 import type { RedirectMatrix, RedirectProbe } from "./types";
 import { wwwOf } from "./normalize";
+import { resolvePublicAddress } from "./public-ip";
 
 async function probe(url: string): Promise<RedirectProbe> {
   try {
-    const res = await fetch(url, {
-      method: "HEAD",
-      redirect: "manual",
-      signal: AbortSignal.timeout(10000),
+    const parsed = new URL(url);
+    const target = await resolvePublicAddress(parsed.hostname);
+    if (!target) {
+      return {
+        url,
+        status: null,
+        location: null,
+        hsts: false,
+        error: "Domain must resolve to a public IP address before redirects can be checked.",
+      };
+    }
+    const isHttps = parsed.protocol === "https:";
+    const request = isHttps ? https.request : http.request;
+    const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = request(
+        {
+          host: target.address,
+          port: parsed.port ? Number(parsed.port) : isHttps ? 443 : 80,
+          path: `${parsed.pathname}${parsed.search}`,
+          method: "HEAD",
+          headers: { Host: parsed.host },
+          servername: isHttps ? parsed.hostname : undefined,
+          timeout: 10000,
+        },
+        resolve
+      );
+      req.on("error", reject);
+      req.on("timeout", () => req.destroy(new Error("request timed out")));
+      req.end();
     });
     return {
       url,
-      status: res.status,
-      location: res.headers.get("location"),
-      hsts: Boolean(res.headers.get("strict-transport-security")),
+      status: res.statusCode ?? null,
+      location:
+        typeof res.headers.location === "string"
+          ? res.headers.location
+          : res.headers.location?.[0] ?? null,
+      hsts: Boolean(res.headers["strict-transport-security"]),
       error: null,
     };
   } catch (e) {

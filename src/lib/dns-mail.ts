@@ -20,7 +20,7 @@ export async function fetchDns(domain: string): Promise<DnsSnapshot> {
     safeResolve(() => dns.resolve6(domain)),
     safeResolve(() => dns.resolve4(www)),
     dns.resolveMx(domain).then((r) => r.map((m) => `${m.priority} ${m.exchange}`)).catch(() => [] as string[]),
-    safeResolve(() => dns.resolveTxt(domain).then((rows) => rows.map((r) => r.join(""))),
+    safeResolve(() => dns.resolveTxt(domain).then((rows) => rows.map((r) => r.join("")))),
     safeResolve(() =>
       dns.resolveCaa(domain).then((rows) =>
         rows.map((r) => `${r.critical ? "critical " : ""}${Object.entries(r).filter(([k]) => k !== "critical").map(([k, v]) => `${k}:${v}`).join(" ")}`)
