@@ -28,7 +28,7 @@ async function probe(url: string): Promise<RedirectProbe> {
           port: parsed.port ? Number(parsed.port) : isHttps ? 443 : 80,
           path: `${parsed.pathname}${parsed.search}`,
           method: "HEAD",
-          headers: { Host: parsed.host },
+          headers: { Host: parsed.hostname },
           servername: isHttps ? parsed.hostname : undefined,
           timeout: 10000,
         },
