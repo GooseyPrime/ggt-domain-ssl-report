@@ -5,6 +5,7 @@ import type { FreeLookupResult, PaidReportResponse } from "@/lib/types";
 import { checkoutUrl, displayPrice } from "@/lib/shop";
 
 const PRICE = displayPrice();
+const CAN_USE_PAID_STUB = process.env.NODE_ENV !== "production";
 
 export default function Page() {
   const [domain, setDomain] = useState("example.com");
@@ -59,10 +60,9 @@ export default function Page() {
         .split(/[\n,]+/)
         .map((s) => s.trim())
         .filter(Boolean);
-      const paidUrl =
-        process.env.NODE_ENV === "production"
-          ? "/tools/domain-ssl-report/api/report"
-          : "/tools/domain-ssl-report/api/report?paid=1";
+      const paidUrl = CAN_USE_PAID_STUB
+        ? "/tools/domain-ssl-report/api/report?paid=1"
+        : "/tools/domain-ssl-report/api/report";
       const res = await fetch(paidUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -168,21 +168,23 @@ export default function Page() {
             </a>
           </p>
 
-          <form className="ggt-domain-list" onSubmit={onPaid}>
-            <label htmlFor="multi">
-              After purchase (or local stub), paste up to ten domains:
-            </label>
-            <textarea
-              id="multi"
-              className="ggt-input"
-              value={multi}
-              onChange={(e) => setMulti(e.target.value)}
-              placeholder={"example.com\ncloudflare.com"}
-            />
-            <button className="ggt-btn" type="submit" disabled={busy}>
-              Build paid report (local stub)
-            </button>
-          </form>
+          {CAN_USE_PAID_STUB ? (
+            <form className="ggt-domain-list" onSubmit={onPaid}>
+              <label htmlFor="multi">
+                After purchase (or local stub), paste up to ten domains:
+              </label>
+              <textarea
+                id="multi"
+                className="ggt-input"
+                value={multi}
+                onChange={(e) => setMulti(e.target.value)}
+                placeholder={"example.com\ncloudflare.com"}
+              />
+              <button className="ggt-btn" type="submit" disabled={busy}>
+                Build paid report (local stub)
+              </button>
+            </form>
+          ) : null}
         </section>
 
         {paid ? (
