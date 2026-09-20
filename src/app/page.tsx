@@ -59,7 +59,11 @@ export default function Page() {
         .split(/[\n,]+/)
         .map((s) => s.trim())
         .filter(Boolean);
-      const res = await fetch("/tools/domain-ssl-report/api/report?paid=1", {
+      const paidUrl =
+        process.env.NODE_ENV === "production"
+          ? "/tools/domain-ssl-report/api/report"
+          : "/tools/domain-ssl-report/api/report?paid=1";
+      const res = await fetch(paidUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domains }),
