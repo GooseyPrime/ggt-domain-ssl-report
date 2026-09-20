@@ -6,9 +6,27 @@ import { daysUntil, shouldWarn } from "./expiry";
 import { wwwOf } from "./normalize";
 import { resolvePublicAddress } from "./public-ip";
 
+function matchesHostname(pattern: string, hostname: string): boolean {
+  const normalizedPattern = pattern.toLowerCase();
+  const normalizedHost = hostname.toLowerCase();
+  if (normalizedPattern === normalizedHost) return true;
+  if (!normalizedPattern.startsWith("*.")) return false;
+  const suffix = normalizedPattern.slice(1);
+  return normalizedHost.endsWith(suffix) && normalizedHost.split(".").length === suffix.split(".").length;
+}
+
 function connectCert(host: string, servername: string): Promise<TlsDetails> {
   return new Promise((resolve) => {
-    const socket = tls.connect(
+    let settled = false;
+    let socket: tls.TLSSocket;
+    const finish = (details: TlsDetails, destroy = false) => {
+      if (settled) return;
+      settled = true;
+      if (destroy) socket.destroy();
+      else socket.end();
+      resolve(details);
+    };
+    socket = tls.connect(
       { host, port: 443, servername, rejectUnauthorized: false, timeout: 12000 },
       () => {
         try {
@@ -46,12 +64,11 @@ function connectCert(host: string, servername: string): Promise<TlsDetails> {
             typeof cert.subject === "object" && cert.subject && "CN" in cert.subject
               ? String((cert.subject as { CN?: string }).CN || "")
               : null;
-          const coversBare = san.includes(servername.replace(/^www\./, "")) || san.includes(servername);
+          const bareHost = servername.replace(/^www\./, "");
+          const coversBare = san.some((name) => matchesHostname(name, bareHost));
           const www = wwwOf(servername.replace(/^www\./, ""));
-          const coversWww =
-            san.includes(www) || san.some((s) => s.startsWith("*.") && www.endsWith(s.slice(1)));
-          socket.end();
-          resolve({
+          const coversWww = san.some((name) => matchesHostname(name, www));
+          finish({
             issuer: issuer || null,
             subject: subject || null,
             notBefore,
@@ -63,23 +80,25 @@ function connectCert(host: string, servername: string): Promise<TlsDetails> {
             error: null,
           });
         } catch (e) {
-          socket.destroy();
-          resolve({
-            issuer: null,
-            subject: null,
-            notBefore: null,
-            notAfter: null,
-            san: [],
-            coversBare: null,
-            coversWww: null,
-            chainSubjects: [],
-            error: e instanceof Error ? e.message : "TLS parse failed",
-          });
+            finish(
+              {
+                issuer: null,
+                subject: null,
+                notBefore: null,
+                notAfter: null,
+                san: [],
+                coversBare: null,
+                coversWww: null,
+                chainSubjects: [],
+                error: e instanceof Error ? e.message : "TLS parse failed",
+              },
+              true
+            );
         }
       }
     );
     socket.on("error", (err) => {
-      resolve({
+      finish({
         issuer: null,
         subject: null,
         notBefore: null,
@@ -92,18 +111,20 @@ function connectCert(host: string, servername: string): Promise<TlsDetails> {
       });
     });
     socket.on("timeout", () => {
-      socket.destroy();
-      resolve({
-        issuer: null,
-        subject: null,
-        notBefore: null,
-        notAfter: null,
-        san: [],
-        coversBare: null,
-        coversWww: null,
-        chainSubjects: [],
-        error: "TLS handshake timed out.",
-      });
+      finish(
+        {
+            issuer: null,
+            subject: null,
+            notBefore: null,
+            notAfter: null,
+            san: [],
+            coversBare: null,
+            coversWww: null,
+            chainSubjects: [],
+            error: "TLS handshake timed out.",
+        },
+        true
+      );
     });
   });
 }
