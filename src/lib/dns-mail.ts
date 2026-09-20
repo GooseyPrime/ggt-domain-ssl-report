@@ -58,6 +58,8 @@ export async function assessMail(domain: string, dnsSnap?: DnsSnapshot): Promise
 
   const spfAll = spf?.match(/([+\-~?])all\b/i)?.[1];
   const dmarcP = dmarc?.match(/\bp=([a-z]+)/i)?.[1]?.toLowerCase();
+  const dmarcPctRaw = dmarc?.match(/\bpct=(\d{1,3})\b/i)?.[1];
+  const dmarcPct = dmarcPctRaw ? Math.max(0, Math.min(100, Number(dmarcPctRaw))) : 100;
 
   if (!spf && !dmarc) {
     risk = "high";
@@ -73,9 +75,24 @@ export async function assessMail(domain: string, dnsSnap?: DnsSnapshot): Promise
   } else if (dmarcP === "quarantine") {
     risk = "medium";
     line = "DMARC quarantine is better than none; reject is stronger for a small business.";
+    if (dmarcPct < 100) {
+      risk = dmarcPct === 0 ? "elevated" : "medium";
+      line =
+        dmarcPct === 0
+          ? "DMARC quarantine is published but pct=0 disables enforcement. Tighten DMARC before calling spoof risk low."
+          : `DMARC quarantine only applies to about ${dmarcPct}% of messages. Increase pct to 100 for stronger enforcement.`;
+    }
   } else if (dmarcP === "reject" && spf && spfAll !== "+") {
-    risk = "low";
-    line = "SPF present and DMARC p=reject — strongest common public posture against simple spoofing.";
+    if (dmarcPct < 100) {
+      risk = dmarcPct === 0 ? "elevated" : "medium";
+      line =
+        dmarcPct === 0
+          ? "DMARC reject is published but pct=0 disables enforcement. Tighten DMARC before calling spoof risk low."
+          : `SPF is present and DMARC reject only applies to about ${dmarcPct}% of messages. Increase pct to 100 for the strongest common posture.`;
+    } else {
+      risk = "low";
+      line = "SPF present and DMARC p=reject — strongest common public posture against simple spoofing.";
+    }
   } else {
     risk = "medium";
     line = "Some mail authentication is present; review SPF and DMARC together with your mail host.";

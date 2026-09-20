@@ -1,11 +1,85 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import type { FreeLookupResult, PaidReportResponse } from "@/lib/types";
+import type { FreeLookupResult, PaidDomainReport, PaidReportResponse } from "@/lib/types";
 import { checkoutUrl, displayPrice } from "@/lib/shop";
 
 const PRICE = displayPrice();
 const CAN_USE_PAID_STUB = process.env.NODE_ENV !== "production";
+
+function renderLines(values: string[]) {
+  return values.length ? values.join(", ") : "None published";
+}
+
+function renderBool(value: boolean | null) {
+  if (value === null) return "Unknown";
+  return value ? "Yes" : "No";
+}
+
+function PaidDomainDetails({ report }: { report: PaidDomainReport }) {
+  return (
+    <article className="ggt-result">
+      <h3 className="ggt-mono">{report.domain}</h3>
+      <p>
+        <strong>Registrar:</strong> {report.registrar.name ?? "Not published"}
+        {report.registrar.ianaId ? ` (IANA ${report.registrar.ianaId})` : ""}
+      </p>
+      <p>
+        <strong>Domain expiry:</strong>{" "}
+        {report.free.domainExpiry.date ?? report.free.domainExpiry.message}
+      </p>
+      <p>
+        <strong>Certificate expiry:</strong>{" "}
+        {report.free.certExpiry.date ?? report.free.certExpiry.message}
+      </p>
+      <p>
+        <strong>Certificate issuer:</strong> {report.tls.issuer ?? "Unavailable"}
+      </p>
+      <p>
+        <strong>Bare domain covered:</strong> {renderBool(report.tls.coversBare)}
+      </p>
+      <p>
+        <strong>www covered:</strong> {renderBool(report.tls.coversWww)}
+      </p>
+      <p>
+        <strong>SANs:</strong> {renderLines(report.tls.san)}
+      </p>
+      <p>
+        <strong>Certificate chain:</strong> {renderLines(report.tls.chainSubjects)}
+      </p>
+      <p>
+        <strong>Nameservers:</strong> {renderLines(report.dns.nameservers)}
+      </p>
+      <p>
+        <strong>A records:</strong> {renderLines(report.dns.a)}
+      </p>
+      <p>
+        <strong>AAAA records:</strong> {renderLines(report.dns.aaaa)}
+      </p>
+      <p>
+        <strong>Mail posture:</strong> {report.mail.line}
+      </p>
+      <p>
+        <strong>MX records:</strong> {renderLines(report.mail.mx)}
+      </p>
+      <p>
+        <strong>Redirects:</strong> {report.redirects.note}
+      </p>
+      <ul>
+        {report.redirects.probes.map((probe) => (
+          <li key={probe.url}>
+            <span className="ggt-mono">{probe.url}</span>:{" "}
+            {probe.error
+              ? probe.error
+              : `${probe.status ?? "No status"}${probe.location ? ` → ${probe.location}` : ""}${
+                  probe.hsts ? " (HSTS)" : ""
+                }`}
+          </li>
+        ))}
+      </ul>
+    </article>
+  );
+}
 
 export default function Page() {
   const [domain, setDomain] = useState("example.com");
@@ -193,6 +267,11 @@ export default function Page() {
             <pre className="ggt-mono" style={{ whiteSpace: "pre-wrap" }}>
               {paid.plainSummary}
             </pre>
+            <div>
+              {paid.domains.map((report) => (
+                <PaidDomainDetails key={report.domain} report={report} />
+              ))}
+            </div>
             <button className="ggt-btn" type="button" onClick={downloadIcs}>
               Download .ics
             </button>

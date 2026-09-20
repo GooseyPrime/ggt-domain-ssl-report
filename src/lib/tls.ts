@@ -144,15 +144,7 @@ export async function fetchTls(domain: string): Promise<TlsDetails> {
       error: "Domain must resolve to a public IP address before TLS can be checked.",
     };
   }
-  let details = await connectCert(primary.address, domain);
-  if (details.error || !details.notAfter) {
-    const www = wwwOf(domain);
-    const altTarget = await resolvePublicAddress(www);
-    if (!altTarget) return details;
-    const alt = await connectCert(altTarget.address, www);
-    if (!alt.error && alt.notAfter) return alt;
-  }
-  return details;
+  return connectCert(primary.address, domain);
 }
 
 export function certExpiryFromTls(tlsDetails: TlsDetails, now = new Date()): CertExpiry {
