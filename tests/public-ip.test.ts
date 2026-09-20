@@ -8,6 +8,8 @@ describe("public IP policy", () => {
     expect(isPublicIp("169.254.169.254")).toBe(false);
     expect(isPublicIp("::1")).toBe(false);
     expect(isPublicIp("fc00::1")).toBe(false);
+    expect(isPublicIp("2001:10::1")).toBe(false);
+    expect(isPublicIp("::ffff:127.0.0.1")).toBe(false);
   });
 
   it("keeps public addresses available for pinning", () => {

@@ -67,13 +67,7 @@ export async function paidDomainReport(rawDomain: string, now = new Date()): Pro
     domain,
     free,
     registrar,
-    tls: {
-      ...tls,
-      coversBare: tls.san.includes(domain) || tls.san.some((s) => s === domain),
-      coversWww:
-        tls.san.includes(`www.${domain}`) ||
-        tls.san.some((s) => s.startsWith("*.") && `www.${domain}`.endsWith(s.slice(1))),
-    },
+    tls,
     dns,
     mail,
     redirects,
