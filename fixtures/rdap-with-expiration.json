@@ -1,0 +1,49 @@
+{
+  "ldhName": "EXAMPLE.COM",
+  "events": [
+    {
+      "eventAction": "registration",
+      "eventDate": "1995-08-14T04:00:00Z"
+    },
+    {
+      "eventAction": "expiration",
+      "eventDate": "2027-08-13T04:00:00Z"
+    }
+  ],
+  "entities": [
+    {
+      "roles": [
+        "registrar"
+      ],
+      "handle": "376",
+      "publicIds": [
+        {
+          "type": "IANA Registrar ID",
+          "identifier": "376"
+        }
+      ],
+      "vcardArray": [
+        "vcard",
+        [
+          [
+            "version",
+            {},
+            "text",
+            "4.0"
+          ],
+          [
+            "fn",
+            {},
+            "text",
+            "Example Registrar"
+          ]
+        ]
+      ]
+    }
+  ],
+  "nameservers": [
+    {
+      "ldhName": "NS1.EXAMPLE.COM"
+    }
+  ]
+}
