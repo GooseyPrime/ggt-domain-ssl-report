@@ -26,6 +26,7 @@ describe("startSale", () => {
     });
     const [url, init] = fn.mock.calls[0];
     expect(url).toBe("https://shop.example.com/api/sale");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.parse(init.body)).toEqual({
       url: "https://shop.example.com/tools/domain-ssl-report",
       product: "domain-ssl-report",
@@ -48,8 +49,9 @@ describe("startSale", () => {
 
 describe("verifySale", () => {
   it("is paid only for ok + paid + matching product", async () => {
-    stubFetch(200, { ok: true, paid: true, product: "domain-ssl-report" });
+    const fn = stubFetch(200, { ok: true, paid: true, product: "domain-ssl-report" });
     expect((await verifySale("cs_1")).paid).toBe(true);
+    expect(fn.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
 
   it("rejects a paid session for another product", async () => {

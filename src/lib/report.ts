@@ -88,10 +88,9 @@ export async function paidReport(rawDomains: string[], now = new Date()): Promis
   if (!unique.length) throw new Error("Add at least one valid domain.");
   if (unique.length > 10) throw new Error("Paid report covers up to ten domains.");
 
-  const domains: PaidDomainReport[] = [];
-  for (const d of unique) {
-    domains.push(await paidDomainReport(d, now));
-  }
+  const domains: PaidDomainReport[] = await Promise.all(
+    unique.map((domain) => paidDomainReport(domain, now))
+  );
 
   const icsEvents = [];
   for (const d of domains) {

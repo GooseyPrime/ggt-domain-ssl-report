@@ -145,14 +145,14 @@ export default function Page() {
     if (!candidate) return;
     (async () => {
       try {
+        sessionStorage.setItem(SESSION_KEY, candidate);
         const res = await fetch(`${API}/verify?session_id=${encodeURIComponent(candidate)}`);
         const data = await res.json();
-        if (fromUrl) window.history.replaceState(null, "", TOOL_PATH);
         if (!res.ok || !data.paid) {
-          sessionStorage.removeItem(SESSION_KEY);
           if (fromUrl) setError(data.message || "We could not confirm that purchase.");
           return;
         }
+        if (fromUrl) window.history.replaceState(null, "", TOOL_PATH);
         sessionStorage.setItem(SESSION_KEY, candidate);
         setSessionId(candidate);
         setNote("Payment confirmed. Your full report is unlocked in this tab.");

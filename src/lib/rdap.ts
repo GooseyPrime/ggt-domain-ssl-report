@@ -147,7 +147,7 @@ export async function fetchRdap(domain: string): Promise<RdapDomain | null> {
   if (base) {
     try {
       const direct = await getRdap(`${base}domain/${name}`);
-      if (direct) return direct;
+      if (direct && direct.errorCode !== 429) return direct;
     } catch {
       /* fall through to rdap.org */
     }

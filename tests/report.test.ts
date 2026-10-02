@@ -43,7 +43,7 @@ vi.mock("@/lib/ics", () => ({
   buildIcs: mocks.buildIcs,
 }));
 
-import { paidDomainReport } from "@/lib/report";
+import { paidDomainReport, paidReport } from "@/lib/report";
 
 describe("paidDomainReport", () => {
   beforeEach(() => {
@@ -121,5 +121,43 @@ describe("paidDomainReport", () => {
     expect(result.free.domainExpiry).toEqual(domainExpiry);
     expect(result.free.certExpiry).toEqual(certExpiry);
     expect(result.domain).toBe("example.com");
+  });
+
+  it("starts all domain reports concurrently", async () => {
+    let releaseRdap: ((value: { entities: [] }) => void) | undefined;
+    const rdapGate = new Promise<{ entities: [] }>((resolve) => {
+      releaseRdap = resolve;
+    });
+    mocks.fetchRdap.mockReturnValue(rdapGate);
+    mocks.fetchTls.mockResolvedValue({} as TlsDetails);
+    mocks.fetchDns.mockResolvedValue({ hostingHint: "" } as DnsSnapshot);
+    mocks.fetchRedirects.mockResolvedValue({ note: "" } as RedirectMatrix);
+    mocks.findRegistrar.mockReturnValue({ renewHint: "" } as RegistrarInfo);
+    mocks.assessMail.mockResolvedValue({ line: "" } as MailSpoofAssessment);
+    mocks.parseDomainExpiry.mockReturnValue({
+      date: null,
+      message: "unavailable",
+      daysLeft: null,
+      source: "unavailable",
+      warn: false,
+    });
+    mocks.certExpiryFromTls.mockReturnValue({
+      date: null,
+      message: "unavailable",
+      daysLeft: null,
+      source: "unavailable",
+      warn: false,
+    });
+
+    const report = paidReport(["one.example", "two.example"]);
+    try {
+      expect(mocks.fetchRdap).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseRdap?.({ entities: [] });
+    }
+    expect((await report).domains.map(({ domain }) => domain)).toEqual([
+      "one.example",
+      "two.example",
+    ]);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseDomainExpiry, findRegistrar } from "../src/lib/rdap";
@@ -34,7 +34,7 @@ describe("RDAP parse", () => {
   });
 });
 
-import { registryBaseFor } from "../src/lib/rdap";
+import { fetchRdap, registryBaseFor } from "../src/lib/rdap";
 
 describe("registryBaseFor", () => {
   const bootstrap = {
@@ -52,5 +52,70 @@ describe("registryBaseFor", () => {
   it("returns null for unknown TLDs or no bootstrap", () => {
     expect(registryBaseFor("a.zzz", bootstrap)).toBeNull();
     expect(registryBaseFor("a.com", null)).toBeNull();
+  });
+});
+
+describe("fetchRdap", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to rdap.org when the registry rate-limits the direct lookup", async () => {
+    const fallback = { objectClassName: "domain", ldhName: "example.com" };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://data.iana.org/rdap/dns.json") {
+        return new Response(
+          JSON.stringify({
+            services: [[["com"], ["https://rdap.verisign.com/com/v1/"]]],
+          })
+        );
+      }
+      if (url === "https://rdap.verisign.com/com/v1/domain/example.com") {
+        return new Response(JSON.stringify({ errorCode: 429, title: "Too Many Requests" }), {
+          status: 429,
+        });
+      }
+      if (url === "https://rdap.org/domain/example.com") {
+        return new Response(JSON.stringify(fallback));
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchRdap("example.com")).resolves.toEqual(fallback);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://data.iana.org/rdap/dns.json",
+      "https://rdap.verisign.com/com/v1/domain/example.com",
+      "https://rdap.org/domain/example.com",
+    ]);
+  });
+
+  it("keeps the registry's authoritative not-found response", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://data.iana.org/rdap/dns.json") {
+        return new Response(
+          JSON.stringify({
+            services: [[["com"], ["https://rdap.verisign.com/com/v1/"]]],
+          })
+        );
+      }
+      if (url === "https://rdap.verisign.com/com/v1/domain/example.com") {
+        return new Response(JSON.stringify({ errorCode: 404, title: "Not Found" }), {
+          status: 404,
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchRdap("example.com")).resolves.toEqual({
+      errorCode: 404,
+      title: "Not Found",
+    });
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContain(
+      "https://rdap.org/domain/example.com"
+    );
   });
 });

@@ -1,5 +1,7 @@
 import { TOOL_ID, shopOrigin, toolPublicUrl } from "./shop";
 
+const SHOP_REQUEST_TIMEOUT_MS = 10000;
+
 export type SaleResult =
   | { ok: true; checkoutUrl: string; sessionId?: string }
   | { ok: false; message: string };
@@ -34,6 +36,7 @@ export async function startSale(): Promise<SaleResult> {
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ url: toolPublicUrl(), product: TOOL_ID, toolId: TOOL_ID }),
       cache: "no-store",
+      signal: AbortSignal.timeout(SHOP_REQUEST_TIMEOUT_MS),
     });
     const data = await readJson(res);
     const checkoutUrl = data ? (asString(data.url) ?? asString(data.checkoutUrl)) : undefined;
@@ -64,6 +67,7 @@ export async function verifySale(sessionId: string): Promise<VerifyResult> {
       method: "GET",
       headers: { Accept: "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(SHOP_REQUEST_TIMEOUT_MS),
     });
     const data = await readJson(res);
     if (!data) {
