@@ -33,3 +33,24 @@ describe("RDAP parse", () => {
     expect(r.ianaId).toBe("376");
   });
 });
+
+import { registryBaseFor } from "../src/lib/rdap";
+
+describe("registryBaseFor", () => {
+  const bootstrap = {
+    services: [
+      [["com", "net"], ["https://rdap.verisign.com/com/v1/"]],
+      [["dev"], ["http://example.test/rdap", "https://example.test/rdap"]],
+    ] as [string[], string[]][],
+  };
+  it("finds the registry for a TLD", () => {
+    expect(registryBaseFor("github.com", bootstrap)).toBe("https://rdap.verisign.com/com/v1/");
+  });
+  it("prefers https and adds a trailing slash", () => {
+    expect(registryBaseFor("a.dev", bootstrap)).toBe("https://example.test/rdap/");
+  });
+  it("returns null for unknown TLDs or no bootstrap", () => {
+    expect(registryBaseFor("a.zzz", bootstrap)).toBeNull();
+    expect(registryBaseFor("a.com", null)).toBeNull();
+  });
+});
