@@ -31,6 +31,10 @@ function buildFreeLookupResult(
   };
 }
 
+function trimStop(text: string | null): string {
+  return (text ?? "unavailable").trim().replace(/[.\s]+$/, "");
+}
+
 export async function freeLookup(rawDomain: string, now = new Date()): Promise<FreeLookupResult> {
   const domain = normalizeDomain(rawDomain);
   if (!domain) {
@@ -55,8 +59,8 @@ export async function paidDomainReport(rawDomain: string, now = new Date()): Pro
   const registrar = findRegistrar(rdap?.entities);
   const mail = await assessMail(domain, dns);
   const ownerSummary = [
-    `${domain}: domain ${free.domainExpiry.date ? `expires ${free.domainExpiry.date}` : free.domainExpiry.message}.`,
-    `Certificate ${free.certExpiry.date ? `expires ${free.certExpiry.date}` : free.certExpiry.message}.`,
+    `${domain} — domain: ${free.domainExpiry.date ? `expires ${free.domainExpiry.date}` : trimStop(free.domainExpiry.message)}.`,
+    `Certificate: ${free.certExpiry.date ? `expires ${free.certExpiry.date}` : trimStop(free.certExpiry.message)}.`,
     registrar.renewHint,
     mail.line,
     redirects.note,

@@ -1,11 +1,20 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { FreeLookupResult, PaidDomainReport, PaidReportResponse } from "@/lib/types";
-import { checkoutUrl, displayPrice } from "@/lib/shop";
+import { TOOL_PATH, displayPrice } from "@/lib/shop";
 
 const PRICE = displayPrice();
-const CAN_USE_PAID_STUB = process.env.NODE_ENV !== "production";
+const API = `${TOOL_PATH}/api`;
+const SESSION_KEY = "ggt-dsr-session";
+const DOMAINS_KEY = "ggt-dsr-domains";
+
+function parseDomains(text: string): string[] {
+  return text
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 function renderLines(values: string[]) {
   return values.length ? values.join(", ") : "None published";
@@ -88,6 +97,9 @@ export default function Page() {
   const [free, setFree] = useState<FreeLookupResult | null>(null);
   const [multi, setMulti] = useState("");
   const [paid, setPaid] = useState<PaidReportResponse | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const checked = useRef(false);
 
   const locked = useMemo(
     () => [
@@ -103,13 +115,67 @@ export default function Page() {
     []
   );
 
+  async function buildReport(session: string, list: string[]) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domains: list, sessionId: session }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Report failed");
+      setPaid(data as PaidReportResponse);
+    } catch (err) {
+      setPaid(null);
+      setError(err instanceof Error ? err.message : "Report failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Returning from checkout (?session_id=) or reopening this tab: confirm payment with the shop.
+  useEffect(() => {
+    if (checked.current) return;
+    checked.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("session_id");
+    const candidate = fromUrl || sessionStorage.getItem(SESSION_KEY);
+    if (!candidate) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/verify?session_id=${encodeURIComponent(candidate)}`);
+        const data = await res.json();
+        if (fromUrl) window.history.replaceState(null, "", TOOL_PATH);
+        if (!res.ok || !data.paid) {
+          sessionStorage.removeItem(SESSION_KEY);
+          if (fromUrl) setError(data.message || "We could not confirm that purchase.");
+          return;
+        }
+        sessionStorage.setItem(SESSION_KEY, candidate);
+        setSessionId(candidate);
+        setNote("Payment confirmed. Your full report is unlocked in this tab.");
+        const saved = localStorage.getItem(DOMAINS_KEY) ?? "";
+        if (saved) {
+          setMulti(saved);
+          const list = parseDomains(saved);
+          if (list.length) await buildReport(candidate, list);
+        }
+      } catch {
+        setError("We could not confirm that purchase. Please try again.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function onFree(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     setPaid(null);
     try {
-      const res = await fetch("/tools/domain-ssl-report/api/lookup", {
+      const res = await fetch(`${API}/lookup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain }),
@@ -125,30 +191,31 @@ export default function Page() {
     }
   }
 
-  async function onPaid(e: FormEvent) {
+  async function onFull(e: FormEvent) {
     e.preventDefault();
+    const list = parseDomains(multi);
+    if (!list.length) {
+      setError("Enter at least one domain.");
+      return;
+    }
+    if (list.length > 10) {
+      setError("The full report covers up to ten domains.");
+      return;
+    }
+    if (sessionId) {
+      await buildReport(sessionId, list);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const domains = multi
-        .split(/[\n,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const paidUrl = CAN_USE_PAID_STUB
-        ? "/tools/domain-ssl-report/api/report?paid=1"
-        : "/tools/domain-ssl-report/api/report";
-      const res = await fetch(paidUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domains }),
-      });
+      localStorage.setItem(DOMAINS_KEY, multi);
+      const res = await fetch(`${API}/sale`, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Report failed");
-      setPaid(data as PaidReportResponse);
+      if (!res.ok || !data.url) throw new Error(data.message || "We could not start checkout.");
+      window.location.assign(data.url as string);
     } catch (err) {
-      setPaid(null);
-      setError(err instanceof Error ? err.message : "Report failed");
-    } finally {
+      setError(err instanceof Error ? err.message : "We could not start checkout.");
       setBusy(false);
     }
   }
@@ -189,7 +256,11 @@ export default function Page() {
           </button>
         </form>
 
-        {error ? <p className="ggt-warn">{error}</p> : null}
+        {error ? (
+          <p className="ggt-warn" role="alert">
+            {error}
+          </p>
+        ) : null}
 
         {free ? (
           <section className="ggt-result" aria-live="polite">
@@ -220,50 +291,45 @@ export default function Page() {
           </section>
         ) : null}
 
-        <aside className="ggt-tally ggt-tally--locked">
-          <h2>Still locked</h2>
-          <ul>
-            {locked.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </aside>
+        {sessionId ? null : (
+          <aside className="ggt-tally ggt-tally--locked">
+            <h2>Still locked</h2>
+            <ul>
+              {locked.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </aside>
+        )}
 
-        <section className="ggt-paywall">
-          <h2>Full report — {PRICE}</h2>
+        <section className="ggt-paywall" aria-labelledby="full-report-heading">
+          <h2 id="full-report-heading">
+            {sessionId ? "Full report" : `Full report — ${PRICE}`}
+          </h2>
           <p className="ggt-muted">
-            Up to ten domains. Checkout runs on the shop (no Stripe keys in this app). Live
-            checkout stays gated until <code className="ggt-mono">domain-ssl-report</code> is on
-            the shop sale allowlist.
+            {sessionId
+              ? "Paste up to ten domains, one per line, and build your report."
+              : "Up to ten domains in one report, with the details above. Pay once, no account."}
           </p>
-          <p>
-            <a className="ggt-btn" href={checkoutUrl("/tools/domain-ssl-report")}>
-              Unlock on shop
-            </a>
-          </p>
-
-          {CAN_USE_PAID_STUB ? (
-            <form className="ggt-domain-list" onSubmit={onPaid}>
-              <label htmlFor="multi">
-                After purchase (or local stub), paste up to ten domains:
-              </label>
-              <textarea
-                id="multi"
-                className="ggt-input"
-                value={multi}
-                onChange={(e) => setMulti(e.target.value)}
-                placeholder={"example.com\ncloudflare.com"}
-              />
-              <button className="ggt-btn" type="submit" disabled={busy}>
-                Build paid report (local stub)
-              </button>
-            </form>
-          ) : null}
+          {note ? <p role="status">{note}</p> : null}
+          <form className="ggt-domain-list" onSubmit={onFull}>
+            <label htmlFor="multi">Domains (up to ten, one per line)</label>
+            <textarea
+              id="multi"
+              className="ggt-input"
+              value={multi}
+              onChange={(e) => setMulti(e.target.value)}
+              placeholder={"example.com\ncloudflare.com"}
+            />
+            <button className="ggt-btn" type="submit" disabled={busy}>
+              {busy ? "Working…" : sessionId ? "Build report" : `Unlock full report — ${PRICE}`}
+            </button>
+          </form>
         </section>
 
         {paid ? (
-          <section className="ggt-result">
-            <h2>Paid report</h2>
+          <section className="ggt-result" aria-live="polite">
+            <h2>Your report</h2>
             <pre className="ggt-mono" style={{ whiteSpace: "pre-wrap" }}>
               {paid.plainSummary}
             </pre>
