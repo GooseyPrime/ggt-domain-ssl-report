@@ -31,6 +31,10 @@ function buildFreeLookupResult(
   };
 }
 
+function trimStop(text: string | null): string {
+  return (text ?? "unavailable").trim().replace(/[.\s]+$/, "");
+}
+
 export async function freeLookup(rawDomain: string, now = new Date()): Promise<FreeLookupResult> {
   const domain = normalizeDomain(rawDomain);
   if (!domain) {
@@ -55,8 +59,8 @@ export async function paidDomainReport(rawDomain: string, now = new Date()): Pro
   const registrar = findRegistrar(rdap?.entities);
   const mail = await assessMail(domain, dns);
   const ownerSummary = [
-    `${domain}: domain ${free.domainExpiry.date ? `expires ${free.domainExpiry.date}` : free.domainExpiry.message}.`,
-    `Certificate ${free.certExpiry.date ? `expires ${free.certExpiry.date}` : free.certExpiry.message}.`,
+    `${domain} — domain: ${free.domainExpiry.date ? `expires ${free.domainExpiry.date}` : trimStop(free.domainExpiry.message)}.`,
+    `Certificate: ${free.certExpiry.date ? `expires ${free.certExpiry.date}` : trimStop(free.certExpiry.message)}.`,
     registrar.renewHint,
     mail.line,
     redirects.note,
@@ -84,10 +88,9 @@ export async function paidReport(rawDomains: string[], now = new Date()): Promis
   if (!unique.length) throw new Error("Add at least one valid domain.");
   if (unique.length > 10) throw new Error("Paid report covers up to ten domains.");
 
-  const domains: PaidDomainReport[] = [];
-  for (const d of unique) {
-    domains.push(await paidDomainReport(d, now));
-  }
+  const domains: PaidDomainReport[] = await Promise.all(
+    unique.map((domain) => paidDomainReport(domain, now))
+  );
 
   const icsEvents = [];
   for (const d of domains) {

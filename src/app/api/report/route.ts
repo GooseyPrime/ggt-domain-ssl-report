@@ -1,35 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paidReport } from "@/lib/report";
-import { isPaidStub } from "@/lib/shop";
+import { verifySale } from "@/lib/payments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
- * Paid multi-domain report.
- * Checkout stays gated until shop SALE_PRODUCT_IDS includes domain-ssl-report.
- * Non-production only: ?paid=1, cookie ggt_paid=1, or GGT_PAID_STUB=1.
+ * Paid multi-domain report. Requires a checkout session that the shop confirms as
+ * paid for domain-ssl-report; there is no bypass.
  */
 export async function POST(req: NextRequest) {
-  const paid = isPaidStub({
-    searchParams: req.nextUrl.searchParams,
-    cookieHeader: req.headers.get("cookie"),
-  });
-  if (!paid) {
+  let body: { domains?: unknown; sessionId?: unknown } = {};
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: "Send a JSON body." }, { status: 400 });
+  }
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+  const verified = await verifySale(sessionId);
+  if (!verified.paid) {
     return NextResponse.json(
       {
-        error:
-          "Paid report is gated until the shop desk allowlist includes domain-ssl-report. Production requires shop verification; local non-production may use the paid stub.",
+        error: "Unlock the full report to run this check.",
         code: "PAYMENT_REQUIRED",
       },
       { status: 402 }
     );
   }
+  const domains = Array.isArray(body.domains)
+    ? body.domains.filter((d): d is string => typeof d === "string")
+    : [];
   try {
-    const body = (await req.json()) as { domains?: string[] };
-    const domains = body?.domains ?? [];
-    const result = await paidReport(domains);
-    return NextResponse.json(result);
+    return NextResponse.json(await paidReport(domains));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Report failed.";
     return NextResponse.json({ error: msg }, { status: 400 });
