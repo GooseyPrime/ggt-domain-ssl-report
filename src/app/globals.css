@@ -1,10 +1,5 @@
 @import "ggt-design-kit/src/index.css";
 
-:root {
-  /* Domain & SSL Report — Verdigris */
-  --ggt-accent: #5f8f88;
-}
-
 .ggt-warn {
   color: #ff7b72;
   border: 1px solid color-mix(in srgb, #ff7b72 50%, var(--ggt-hairline, #333));
